@@ -1,533 +1,571 @@
-"""
-LEM - From-scratch Transformer training script
 
-Features:
-- Randomly initialized Transformer weights
-- UTF-8 byte tokenizer
-- Automatic CPU / CUDA / Apple MPS selection
-- Training and validation loss tracking
-- Saves training_stats.json for stats.html
-- Saves checkpoints/lem_latest.pt
-- Resumes training from the latest checkpoint
-
-Run from the project root:
-    python model/train.py
-"""
-
-import json
 import os
-import random
+import re
+import json
+import time
+from pathlib import Path
 from datetime import datetime, timezone
 
 import torch
 
-from tokenizer import encode
+from tokenizer import VOCAB_SIZE
 from transformer import LEMTransformer
 
 
-# --------------------------------------------------
-# MODEL CONFIGURATION
-# --------------------------------------------------
+# ============================================================
+# CONFIGURATION
+# ============================================================
 
 CONFIG = {
-    "vocab_size": 256,
+    "vocab_size": VOCAB_SIZE,
     "block_size": 128,
     "n_embd": 128,
     "n_head": 4,
     "n_layer": 4,
-    "dropout": 0.1,
+    "dropout": 0.1
 }
-
-
-# --------------------------------------------------
-# TRAINING SETTINGS
-# --------------------------------------------------
 
 BATCH_SIZE = 16
 LEARNING_RATE = 0.0003
-
-# Increase this number to train for more steps.
 MAX_STEPS = 5000
 
 EVAL_INTERVAL = 250
 SAVE_INTERVAL = 500
 EVAL_BATCHES = 5
 
+TRAIN_SPLIT = 0.90
 
-# --------------------------------------------------
-# FILE LOCATIONS
-# --------------------------------------------------
+# ============================================================
+# PATHS
+# ============================================================
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = Path(__file__).resolve().parent.parent
 
-DATA_PATH = os.path.join(ROOT, "data", "training.txt")
+DATA_DIR = ROOT / "data"
+CHECKPOINT_DIR = ROOT / "checkpoints"
 
-CHECKPOINT_DIR = os.path.join(ROOT, "checkpoints")
-CHECKPOINT_PATH = os.path.join(CHECKPOINT_DIR, "lem_latest.pt")
+CACHE_PATH = DATA_DIR / "training.bin"
+CACHE_INFO_PATH = DATA_DIR / "training_cache_info.json"
 
-STATS_PATH = os.path.join(ROOT, "training_stats.json")
+CHECKPOINT_PATH = CHECKPOINT_DIR / "lem_latest.pt"
+STATS_PATH = ROOT / "training_stats.json"
 
-
-# --------------------------------------------------
-# DEVICE SELECTION
-# --------------------------------------------------
-
-def choose_device():
-
-    if torch.cuda.is_available():
-        return "cuda"
-
-    if (
-        hasattr(torch.backends, "mps")
-        and torch.backends.mps.is_available()
-    ):
-        return "mps"
-
-    return "cpu"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-# --------------------------------------------------
-# STATISTICS
-# --------------------------------------------------
+# ============================================================
+# DEVICE
+# ============================================================
 
-def load_stats():
+if torch.cuda.is_available():
+    DEVICE = "cuda"
+elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+    DEVICE = "mps"
+else:
+    DEVICE = "cpu"
 
-    if os.path.exists(STATS_PATH):
+print("=" * 60)
+print("LEM TRAINING SYSTEM")
+print("=" * 60)
+print("Device:", DEVICE)
+print("PyTorch:", torch.__version__)
 
-        try:
 
-            with open(STATS_PATH, "r", encoding="utf-8") as file:
-                old_stats = json.load(file)
+# ============================================================
+# FIND DATASET FILES
+# ============================================================
 
-            return {
-                "step": int(old_stats.get("step", 0)),
-                "max_steps": MAX_STEPS,
-                "device": old_stats.get("device", "unknown"),
-                "train_loss": old_stats.get("train_loss", []),
-                "val_loss": old_stats.get("val_loss", []),
-                "updated_at": old_stats.get("updated_at"),
+def natural_sort_key(path):
+    return [
+        int(part) if part.isdigit() else part.lower()
+        for part in re.split(r"(\d+)", path.name)
+    ]
+
+
+def find_dataset_files():
+    part_files = list(DATA_DIR.glob("training_part*.txt"))
+    part_files = sorted(part_files, key=natural_sort_key)
+
+    if part_files:
+        return part_files
+
+    single_file = DATA_DIR / "training.txt"
+
+    if single_file.exists():
+        return [single_file]
+
+    raise FileNotFoundError(
+        "No training data found.\n"
+        "Expected files such as:\n"
+        "data/training_part1.txt\n"
+        "data/training_part2.txt\n"
+        "data/training_part3.txt\n"
+        "\nOr a single data/training.txt file."
+    )
+
+
+# ============================================================
+# BUILD BYTE TOKEN CACHE
+# ============================================================
+
+BOS = b"<|bos|>"
+EOS = b"<|eos|>"
+
+def cache_is_current(files):
+    if not CACHE_PATH.exists() or not CACHE_INFO_PATH.exists():
+        return False
+
+    try:
+        with open(CACHE_INFO_PATH, "r", encoding="utf-8") as f:
+            old_info = json.load(f)
+
+        current_info = [
+            {
+                "name": file.name,
+                "size": file.stat().st_size,
+                "modified": file.stat().st_mtime_ns
             }
+            for file in files
+        ]
 
-        except (
-            json.JSONDecodeError,
-            OSError,
-            TypeError,
-            ValueError,
-        ):
-            print("Could not read previous statistics. Starting new stats.")
+        return old_info.get("sources") == current_info
 
-    return {
-        "step": 0,
-        "max_steps": MAX_STEPS,
-        "device": "unknown",
-        "train_loss": [],
-        "val_loss": [],
-        "updated_at": None,
+    except Exception:
+        return False
+
+
+def write_cleaned_file(source, output):
+    """
+    Copy a text file into the binary cache while removing
+    BOS and EOS markers.
+
+    Uses chunks so the whole file is never loaded into RAM.
+    """
+
+    carry = b""
+    chunk_size = 1024 * 1024
+    keep_length = max(len(BOS), len(EOS)) - 1
+
+    with open(source, "rb") as f:
+        while True:
+            chunk = f.read(chunk_size)
+
+            if not chunk:
+                break
+
+            data = carry + chunk
+
+            if len(data) <= keep_length:
+                carry = data
+                continue
+
+            safe_length = len(data) - keep_length
+
+            safe_data = data[:safe_length]
+            carry = data[safe_length:]
+
+            safe_data = safe_data.replace(BOS, b"")
+            safe_data = safe_data.replace(EOS, b"")
+
+            output.write(safe_data)
+
+    if carry:
+        carry = carry.replace(BOS, b"")
+        carry = carry.replace(EOS, b"")
+        output.write(carry)
+
+
+def build_dataset_cache(files):
+    print("\nBuilding training cache...")
+    print("Source files:", len(files))
+
+    temporary_path = CACHE_PATH.with_suffix(".tmp")
+
+    try:
+        with open(temporary_path, "wb") as output:
+            for index, source in enumerate(files):
+                print(
+                    f"Processing {index + 1}/{len(files)}: "
+                    f"{source.name}"
+                )
+
+                if index > 0:
+                    output.write(b"\n\n")
+
+                write_cleaned_file(source, output)
+
+        os.replace(temporary_path, CACHE_PATH)
+
+    except Exception:
+        if temporary_path.exists():
+            temporary_path.unlink()
+        raise
+
+    source_info = [
+        {
+            "name": file.name,
+            "size": file.stat().st_size,
+            "modified": file.stat().st_mtime_ns
+        }
+        for file in files
+    ]
+
+    info = {
+        "sources": source_info,
+        "cache_size": CACHE_PATH.stat().st_size,
+        "created_at": datetime.now(timezone.utc).isoformat()
     }
 
+    temporary_info = CACHE_INFO_PATH.with_suffix(".tmp")
 
-def save_stats(stats, step, device):
+    with open(temporary_info, "w", encoding="utf-8") as f:
+        json.dump(info, f, indent=2)
 
-    stats["step"] = step
-    stats["max_steps"] = MAX_STEPS
-    stats["device"] = str(device)
+    os.replace(temporary_info, CACHE_INFO_PATH)
 
-    stats["updated_at"] = datetime.now(
-        timezone.utc
-    ).isoformat()
+    print("Cache created:", CACHE_PATH)
+    print("Cache size:", CACHE_PATH.stat().st_size, "bytes")
 
-    temporary_path = STATS_PATH + ".tmp"
 
-    with open(temporary_path, "w", encoding="utf-8") as file:
+# ============================================================
+# LOAD DATASET
+# ============================================================
 
-        json.dump(
-            stats,
-            file,
-            indent=2,
+def load_dataset():
+    files = find_dataset_files()
+
+    print("\nDataset files:")
+
+    for file in files:
+        print(
+            " -",
+            file.name,
+            "|",
+            round(file.stat().st_size / 1024 / 1024, 2),
+            "MB"
         )
 
-    os.replace(temporary_path, STATS_PATH)
-
-
-# --------------------------------------------------
-# BATCH GENERATION
-# --------------------------------------------------
-
-def get_batch(
-    split,
-    train_data,
-    val_data,
-    device,
-):
-
-    if split == "train":
-        source = train_data
+    if cache_is_current(files):
+        print("\nExisting training cache is current.")
     else:
-        source = val_data
+        build_dataset_cache(files)
 
-    block_size = CONFIG["block_size"]
+    data_size = CACHE_PATH.stat().st_size
 
-    if len(source) <= block_size:
-
+    if data_size <= CONFIG["block_size"] + 10:
         raise ValueError(
-            f"The {split} dataset is too small. "
-            f"It contains {len(source)} tokens, but needs "
-            f"more than {block_size}. Add more text to "
-            f"data/training.txt."
+            "The training dataset is too small. "
+            "Add more text before training."
         )
+
+    # Memory-mapped byte tensor.
+    # This avoids loading the complete dataset into a Python list.
+    data = torch.from_file(
+        str(CACHE_PATH),
+        shared=False,
+        size=data_size,
+        dtype=torch.uint8
+    )
+
+    print("\nTotal training bytes:", f"{data_size:,}")
+    print("Dataset loaded using memory mapping.")
+
+    return data
+
+
+# ============================================================
+# TRAIN / VALIDATION SPLIT
+# ============================================================
+
+data = load_dataset()
+
+split_index = int(len(data) * TRAIN_SPLIT)
+
+train_data = data[:split_index]
+val_data = data[split_index:]
+
+if len(val_data) <= CONFIG["block_size"]:
+    raise ValueError("Not enough validation data.")
+
+if len(train_data) <= CONFIG["block_size"]:
+    raise ValueError("Not enough training data.")
+
+print("\nTraining bytes:", f"{len(train_data):,}")
+print("Validation bytes:", f"{len(val_data):,}")
+
+
+# ============================================================
+# MODEL
+# ============================================================
+
+model = LEMTransformer(CONFIG).to(DEVICE)
+
+optimizer = torch.optim.AdamW(
+    model.parameters(),
+    lr=LEARNING_RATE
+)
+
+parameter_count = sum(
+    parameter.numel()
+    for parameter in model.parameters()
+)
+
+print("\nModel parameters:", f"{parameter_count:,}")
+
+
+# ============================================================
+# BATCH GENERATOR
+# ============================================================
+
+def get_batch(source):
+    max_start = len(source) - CONFIG["block_size"] - 1
 
     starts = torch.randint(
         0,
-        len(source) - block_size,
-        (BATCH_SIZE,),
+        max_start + 1,
+        (BATCH_SIZE,)
     )
 
-    x = torch.stack([
-        source[i:i + block_size]
-        for i in starts.tolist()
-    ])
+    offsets = torch.arange(CONFIG["block_size"])
 
-    y = torch.stack([
-        source[i + 1:i + block_size + 1]
-        for i in starts.tolist()
-    ])
+    indices = starts.unsqueeze(1) + offsets.unsqueeze(0)
 
-    return x.to(device), y.to(device)
+    x = source[indices].to(
+        DEVICE,
+        dtype=torch.long
+    )
+
+    y = source[indices + 1].to(
+        DEVICE,
+        dtype=torch.long
+    )
+
+    return x, y
 
 
-# --------------------------------------------------
+# ============================================================
 # EVALUATION
-# --------------------------------------------------
+# ============================================================
 
 @torch.no_grad()
-def evaluate(
-    model,
-    train_data,
-    val_data,
-    device,
-):
-
+def estimate_loss():
     model.eval()
 
     results = {}
 
-    for split in ["train", "val"]:
-
+    for name, source in [
+        ("train", train_data),
+        ("val", val_data)
+    ]:
         losses = []
 
         for _ in range(EVAL_BATCHES):
-
-            x, y = get_batch(
-                split,
-                train_data,
-                val_data,
-                device,
-            )
+            x, y = get_batch(source)
 
             _, loss = model(x, y)
 
             losses.append(loss.item())
 
-        results[split] = sum(losses) / len(losses)
+        results[name] = sum(losses) / len(losses)
 
     model.train()
 
     return results
 
 
-# --------------------------------------------------
-# MAIN TRAINING FUNCTION
-# --------------------------------------------------
+# ============================================================
+# TRAINING STATISTICS
+# ============================================================
 
-def main():
+stats = {
+    "project": "LEM",
+    "version": "2.5",
+    "step": 0,
+    "max_steps": MAX_STEPS,
+    "device": DEVICE,
+    "dataset_files": [],
+    "dataset_bytes": len(data),
+    "parameters": parameter_count,
+    "train_loss": None,
+    "val_loss": None,
+    "loss_history": [],
+    "started_at": datetime.now(timezone.utc).isoformat(),
+    "updated_at": None,
+    "status": "starting"
+}
 
-    random.seed(42)
-    torch.manual_seed(42)
+for file in find_dataset_files():
+    stats["dataset_files"].append(file.name)
 
-    os.makedirs(
-        CHECKPOINT_DIR,
-        exist_ok=True,
-    )
 
-    # Load training text.
+def save_stats():
+    stats["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-    if not os.path.exists(DATA_PATH):
+    temporary_path = STATS_PATH.with_suffix(".tmp")
 
-        raise FileNotFoundError(
-            f"Training file not found: {DATA_PATH}"
-        )
+    with open(temporary_path, "w", encoding="utf-8") as f:
+        json.dump(stats, f, indent=2)
 
-    with open(
-        DATA_PATH,
-        "r",
-        encoding="utf-8",
-    ) as file:
+    os.replace(temporary_path, STATS_PATH)
 
-        raw_text = file.read()
 
-    if not raw_text.strip():
+# ============================================================
+# CHECKPOINT LOADING
+# ============================================================
 
-        raise ValueError(
-            "training.txt is empty."
-        )
+start_step = 0
 
-    # Convert text into byte tokens.
+if CHECKPOINT_PATH.exists():
+    print("\nFound existing checkpoint.")
 
-    token_ids = encode(raw_text)
-
-    if len(token_ids) < CONFIG["block_size"] * 2:
-
-        raise ValueError(
-            "The training dataset is too small. "
-            "Add more text to data/training.txt."
-        )
-
-    all_data = torch.tensor(
-        token_ids,
-        dtype=torch.long,
-    )
-
-    # Split into training and validation data.
-
-    split_index = int(0.9 * len(all_data))
-
-    train_data = all_data[:split_index]
-    val_data = all_data[split_index:]
-
-    # Select device.
-
-    device = choose_device()
-
-    print()
-    print("================================")
-    print("          LEM TRAINING")
-    print("================================")
-    print(f"Device: {device}")
-    print(f"Total tokens: {len(all_data):,}")
-    print(f"Training tokens: {len(train_data):,}")
-    print(f"Validation tokens: {len(val_data):,}")
-    print(f"Maximum steps: {MAX_STEPS}")
-    print("================================")
-    print()
-
-    # Create model.
-
-    model = LEMTransformer(CONFIG).to(device)
-
-    optimizer = torch.optim.AdamW(
-        model.parameters(),
-        lr=LEARNING_RATE,
-    )
-
-    stats = load_stats()
-
-    start_step = 0
-
-    # --------------------------------------------------
-    # RESUME FROM CHECKPOINT
-    # --------------------------------------------------
-
-    if os.path.exists(CHECKPOINT_PATH):
-
-        print("Loading previous checkpoint...")
-
+    try:
         checkpoint = torch.load(
             CHECKPOINT_PATH,
-            map_location=device,
+            map_location=DEVICE,
+            weights_only=False
         )
 
         if checkpoint.get("config") != CONFIG:
+            print("Checkpoint configuration differs.")
+            print("Starting a new training run.")
+        else:
+            model.load_state_dict(checkpoint["model"])
+            optimizer.load_state_dict(checkpoint["optimizer"])
 
-            raise ValueError(
-                "The checkpoint configuration does not match "
-                "the current CONFIG. Use the original configuration "
-                "or move the old checkpoint out of checkpoints/."
-            )
+            start_step = checkpoint.get("step", 0)
 
-        model.load_state_dict(
-            checkpoint["model"]
-        )
+            print("Checkpoint loaded.")
+            print("Resuming from step:", start_step)
 
-        optimizer.load_state_dict(
-            checkpoint["optimizer"]
-        )
+    except Exception as error:
+        print("Could not load checkpoint:", error)
+        print("Starting from the beginning.")
 
-        start_step = int(
-            checkpoint.get("step", 0)
-        )
 
-        print(f"Resuming from step {start_step}")
+# ============================================================
+# CHECKPOINT SAVING
+# ============================================================
 
-    # --------------------------------------------------
-    # CHECKPOINT SAVING
-    # --------------------------------------------------
+def save_checkpoint(step):
+    checkpoint = {
+        "model": model.state_dict(),
+        "optimizer": optimizer.state_dict(),
+        "step": step,
+        "config": CONFIG
+    }
 
-    def save_checkpoint(step):
+    temporary_path = CHECKPOINT_PATH.with_suffix(".tmp")
 
-        torch.save(
-            {
-                "model": model.state_dict(),
-                "optimizer": optimizer.state_dict(),
-                "step": step,
-                "config": CONFIG,
-            },
-            CHECKPOINT_PATH,
-        )
+    torch.save(checkpoint, temporary_path)
+    os.replace(temporary_path, CHECKPOINT_PATH)
 
-        print(
-            f"Checkpoint saved at step {step}"
-        )
+    print("Checkpoint saved:", CHECKPOINT_PATH)
 
-    # Check whether training is already complete.
 
-    if start_step >= MAX_STEPS:
+# ============================================================
+# TRAINING LOOP
+# ============================================================
 
-        print(
-            "The checkpoint has already reached MAX_STEPS."
-        )
+print("\n" + "=" * 60)
+print("STARTING TRAINING")
+print("=" * 60)
 
-        print(
-            "Increase MAX_STEPS in train.py to continue training."
-        )
+model.train()
 
-        save_stats(
-            stats,
-            start_step,
-            device,
-        )
+stats["status"] = "training"
+save_stats()
 
-        return
+start_time = time.time()
 
-    # --------------------------------------------------
-    # TRAINING LOOP
-    # --------------------------------------------------
+try:
+    for step in range(start_step + 1, MAX_STEPS + 1):
 
-    model.train()
+        x, y = get_batch(train_data)
 
-    for step in range(
-        start_step + 1,
-        MAX_STEPS + 1,
-    ):
+        optimizer.zero_grad(set_to_none=True)
 
-        # Get a batch.
-
-        x, y = get_batch(
-            "train",
-            train_data,
-            val_data,
-            device,
-        )
-
-        # Forward pass.
-
-        _, loss = model(x, y)
-
-        # Backpropagation.
-
-        optimizer.zero_grad(
-            set_to_none=True
-        )
+        logits, loss = model(x, y)
 
         loss.backward()
 
-        # Prevent excessively large gradients.
-
         torch.nn.utils.clip_grad_norm_(
             model.parameters(),
-            1.0,
+            1.0
         )
 
         optimizer.step()
 
-        # --------------------------------------------------
-        # PRINT TRAINING PROGRESS
-        # --------------------------------------------------
+        stats["step"] = step
+        stats["train_loss"] = float(loss.item())
 
-        if step % 25 == 0:
+        # ----------------------------------------------------
+        # EVALUATION
+        # ----------------------------------------------------
+
+        if step % EVAL_INTERVAL == 0 or step == 1:
+            losses = estimate_loss()
+
+            stats["train_loss"] = losses["train"]
+            stats["val_loss"] = losses["val"]
+
+            stats["loss_history"].append({
+                "step": step,
+                "train": losses["train"],
+                "validation": losses["val"]
+            })
+
+            elapsed = time.time() - start_time
 
             print(
-                f"Step {step}/{MAX_STEPS} "
-                f"| Batch loss: {loss.item():.4f}"
+                f"Step {step}/{MAX_STEPS} | "
+                f"Train: {losses['train']:.4f} | "
+                f"Validation: {losses['val']:.4f} | "
+                f"Time: {elapsed:.1f}s"
             )
 
-            save_stats(
-                stats,
-                step,
-                device,
-            )
+            save_stats()
 
-        # --------------------------------------------------
-        # EVALUATE MODEL
-        # --------------------------------------------------
-
-        if (
-            step % EVAL_INTERVAL == 0
-            or step == 1
-        ):
-
-            scores = evaluate(
-                model,
-                train_data,
-                val_data,
-                device,
-            )
-
-            train_loss = scores["train"]
-            val_loss = scores["val"]
-
-            print()
-            print(f"Evaluation at step {step}")
-            print(f"Training loss: {train_loss:.4f}")
-            print(f"Validation loss: {val_loss:.4f}")
-            print()
-
-            # Add data for stats.html.
-
-            stats["train_loss"].append({
-                "step": step,
-                "loss": train_loss,
-            })
-
-            stats["val_loss"].append({
-                "step": step,
-                "loss": val_loss,
-            })
-
-            save_stats(
-                stats,
-                step,
-                device,
-            )
-
-        # --------------------------------------------------
-        # SAVE CHECKPOINT
-        # --------------------------------------------------
+        # ----------------------------------------------------
+        # CHECKPOINT
+        # ----------------------------------------------------
 
         if step % SAVE_INTERVAL == 0:
-
             save_checkpoint(step)
+            save_stats()
 
-    # --------------------------------------------------
-    # FINAL SAVE
-    # --------------------------------------------------
-
+    # Final checkpoint
     save_checkpoint(MAX_STEPS)
 
-    save_stats(
-        stats,
-        MAX_STEPS,
-        device,
-    )
+    stats["status"] = "completed"
+    stats["step"] = MAX_STEPS
 
-    print()
-    print("================================")
-    print("       TRAINING FINISHED")
-    print("================================")
-    print(f"Final step: {MAX_STEPS}")
-    print(f"Checkpoint: {CHECKPOINT_PATH}")
-    print(f"Statistics: {STATS_PATH}")
-    print()
+    save_stats()
 
+    print("\nTraining completed!")
 
-if __name__ == "__main__":
-    main()
+except KeyboardInterrupt:
+    print("\nTraining interrupted.")
+
+    save_checkpoint(stats["step"])
+
+    stats["status"] = "interrupted"
+    save_stats()
+
+except Exception as error:
+    print("\nTraining error:", error)
+
+    stats["status"] = "error"
+    stats["error"] = str(error)
+
+    save_stats()
+
+    raise
+
+finally:
+    elapsed = time.time() - start_time
+
+    print("\nTraining time:", round(elapsed, 2), "seconds")
+    print("Current step:", stats["step"])
+    print("Status:", stats["status"])
+    print("Stats:", STATS_PATH)
