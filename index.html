@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEM v 2.5 Chatbot</title>
+<title>LEM v2.5</title>
 
 <style>
 :root {
@@ -109,6 +109,7 @@ body {
     align-items: center;
     justify-content: space-between;
     padding: 0 25px;
+    flex-shrink: 0;
 }
 
 .header-title {
@@ -244,6 +245,7 @@ body {
 .input-section {
     padding: 15px 20px 22px;
     background: linear-gradient(transparent, #090d09 20%);
+    flex-shrink: 0;
 }
 
 .input-container {
@@ -311,11 +313,6 @@ textarea::placeholder {
     margin-top: 12px;
 }
 
-.typing {
-    color: var(--green);
-    font-size: 12px;
-}
-
 /* MOBILE */
 
 @media(max-width: 650px) {
@@ -352,7 +349,6 @@ textarea::placeholder {
 <!-- SIDEBAR -->
 
 <aside class="sidebar">
-
     <div class="logo">LEM.</div>
     <div class="version">VERSION 2.5</div>
 
@@ -363,13 +359,13 @@ textarea::placeholder {
     <div class="sidebar-label">WORKSPACE</div>
 
     <div class="history">◈ Current conversation</div>
-    <div class="history">⌕ Search</div>
+    <div class="history">⌕ GitHub Knowledge</div>
 
     <div class="sidebar-bottom">
-        LEM v 2.5<br>
-        <span style="color:var(--green)">●</span> Interface ready
+        LEM v2.5<br>
+        <span style="color:var(--green)">●</span>
+        <span id="sidebarStatus">Loading database...</span>
     </div>
-
 </aside>
 
 <!-- MAIN -->
@@ -378,28 +374,26 @@ textarea::placeholder {
 
     <header class="header">
         <div class="header-title">
-            LEM <span style="color:var(--green)">v 2.5</span>
+            LEM <span style="color:var(--green)">v2.5</span>
         </div>
 
         <div class="status" id="connection">
-            Ready
+            Loading
         </div>
     </header>
 
     <!-- CHAT -->
 
     <section class="chat-area" id="chatArea">
-
         <div class="messages" id="messages">
 
             <div class="welcome" id="welcome">
-
                 <div class="welcome-logo">LEM.</div>
 
                 <h1>What can I help you with?</h1>
 
                 <p>
-                    LEM v 2.5 · Your AI assistant
+                    LEM v2.5 · GitHub Knowledge Assistant
                 </p>
 
                 <div class="suggestions">
@@ -420,11 +414,9 @@ textarea::placeholder {
                     </button>
 
                 </div>
-
             </div>
 
         </div>
-
     </section>
 
     <!-- INPUT -->
@@ -448,7 +440,7 @@ textarea::placeholder {
         </div>
 
         <div class="footer-note">
-            LEM v 2.5 · Powered by its connected backend
+            LEM v2.5 · Powered by GitHub Knowledge
         </div>
 
     </section>
@@ -462,19 +454,15 @@ textarea::placeholder {
 ================================== */
 
 const CONFIG = {
-
-    BACKEND_URL:
-        "https://YOUR-WORKER.workers.dev",
-
     GITHUB_DATA:
-        "https://raw.githubusercontent.com/BraxtonDev/CHATBOT/main/data/data.json",
+    "https://raw.githubusercontent.com/BraxtonDev/CHATBOT/main/data/data.json",
 
-    DEMO_MODE: false
-
+    MAX_RESULTS: 3,
+    MAX_MESSAGE_LENGTH: 2000
 };
 
 /* ==================================
-   CHAT SYSTEM
+   CHAT VARIABLES
 ================================== */
 
 const input = document.getElementById("userInput");
@@ -482,9 +470,69 @@ const messages = document.getElementById("messages");
 const chatArea = document.getElementById("chatArea");
 const sendButton = document.getElementById("sendButton");
 const connection = document.getElementById("connection");
+const sidebarStatus = document.getElementById("sidebarStatus");
 
 let conversation = [];
 let busy = false;
+let knowledgeDatabase = null;
+
+/* ==================================
+   DATABASE LOADER
+================================== */
+
+async function loadDatabase() {
+
+    connection.textContent = "Loading";
+    sidebarStatus.textContent = "Loading database...";
+
+    try {
+
+        const response = await fetch(CONFIG.GITHUB_DATA, {
+            cache: "no-cache"
+        });
+
+        if (!response.ok) {
+            throw new Error("GitHub returned " + response.status);
+        }
+
+        const data = await response.json();
+
+        if (!data || !Array.isArray(data.content)) {
+            throw new Error("Invalid database format");
+        }
+
+        knowledgeDatabase = data.content.filter(
+            item => typeof item === "string"
+        );
+
+        connection.textContent = "GitHub Connected";
+        sidebarStatus.textContent =
+            knowledgeDatabase.length + " passages loaded";
+
+        console.log(
+            "LEM database loaded:",
+            knowledgeDatabase.length,
+            "passages"
+        );
+
+        return true;
+
+    } catch (error) {
+
+        knowledgeDatabase = null;
+
+        connection.textContent = "Database Offline";
+        sidebarStatus.textContent = "Database unavailable";
+
+        console.error("Database error:", error);
+
+        return false;
+    }
+}
+
+/* ==================================
+   MESSAGE DISPLAY
+================================== */
 
 function addMessage(role, text) {
 
@@ -522,6 +570,108 @@ function addMessage(role, text) {
 }
 
 /* ==================================
+   TEXT PROCESSING
+================================== */
+
+function tokenize(text) {
+
+    const ignored = new Set([
+        "the", "and", "for", "that", "this",
+        "what", "how", "can", "you", "are",
+        "does", "with", "from", "tell", "about",
+        "have", "has", "was", "were", "will",
+        "would", "could", "should", "into",
+        "your", "their", "there", "then",
+        "please", "explain", "make", "some"
+    ]);
+
+    return (text.toLowerCase().match(/[a-z0-9]+/g) || [])
+        .filter(word => word.length > 2 && !ignored.has(word));
+}
+
+/* ==================================
+   SEARCH ENGINE
+================================== */
+
+function searchDatabase(query) {
+
+    if (!knowledgeDatabase) {
+        return [];
+    }
+
+    const keywords = tokenize(query);
+
+    if (keywords.length === 0) {
+        return [];
+    }
+
+    const queryLower = query.toLowerCase();
+
+    const results = knowledgeDatabase.map(passage => {
+
+        const content = passage.toLowerCase();
+        let score = 0;
+
+        for (const word of keywords) {
+
+            const matches = content.split(word).length - 1;
+
+            if (matches > 0) {
+                score += Math.min(matches, 5);
+            }
+        }
+
+        // Give a small bonus to passages matching the whole query.
+        if (content.includes(queryLower)) {
+            score += 5;
+        }
+
+        // Prefer passages that contain more of the query keywords.
+        const matchedWords = keywords.filter(
+            word => content.includes(word)
+        ).length;
+
+        score += matchedWords * 0.5;
+
+        return {
+            passage,
+            score,
+            matchedWords
+        };
+
+    });
+
+    return results
+        .filter(item => item.score > 0)
+        .sort((a, b) => {
+            if (b.score !== a.score) {
+                return b.score - a.score;
+            }
+
+            return b.matchedWords - a.matchedWords;
+        })
+        .slice(0, CONFIG.MAX_RESULTS);
+}
+
+/* ==================================
+   RESPONSE GENERATOR
+================================== */
+
+function generateReply(query) {
+
+    const results = searchDatabase(query);
+
+    if (!results.length) {
+
+        return "I couldn't find a matching passage in my GitHub knowledge database.\n\nTry using different keywords or asking about a topic in my database.";
+    }
+
+    return results
+        .map(item => item.passage)
+        .join("\n\n");
+}
+
+/* ==================================
    SEND MESSAGE
 ================================== */
 
@@ -530,6 +680,16 @@ async function sendMessage() {
     const text = input.value.trim();
 
     if (!text || busy) return;
+
+    if (text.length > CONFIG.MAX_MESSAGE_LENGTH) {
+        addMessage(
+            "assistant",
+            "Please keep your message under " +
+            CONFIG.MAX_MESSAGE_LENGTH +
+            " characters."
+        );
+        return;
+    }
 
     addMessage("user", text);
 
@@ -544,43 +704,24 @@ async function sendMessage() {
     busy = true;
     sendButton.disabled = true;
 
-    connection.textContent = "Thinking";
+    connection.textContent = "Searching";
 
-    const loading = addMessage("assistant", "LEM is thinking...");
+    const loading = addMessage(
+        "assistant",
+        "LEM is searching its knowledge..."
+    );
 
     try {
 
-        if (CONFIG.DEMO_MODE) {
-            throw new Error("Demo mode");
+        if (!knowledgeDatabase) {
+            await loadDatabase();
         }
 
-        const response = await fetch(
-            CONFIG.BACKEND_URL + "/api/chat",
-            {
-                method: "POST",
-
-                headers: {
-                    "Content-Type": "application/json"
-                },
-
-                body: JSON.stringify({
-                    message: text,
-                    history: conversation
-                })
-            }
-        );
-
-        if (!response.ok) {
-            throw new Error("Backend error: " + response.status);
+        if (!knowledgeDatabase) {
+            throw new Error("Knowledge database unavailable");
         }
 
-        const data = await response.json();
-
-        const reply = data.reply;
-
-        if (typeof reply !== "string") {
-            throw new Error("Invalid backend response");
-        }
+        const reply = generateReply(text);
 
         loading.querySelector(".message-text").textContent = reply;
 
@@ -589,14 +730,14 @@ async function sendMessage() {
             content: reply
         });
 
-        connection.textContent = "Connected";
+        connection.textContent = "GitHub Connected";
 
     } catch (error) {
 
         loading.querySelector(".message-text").textContent =
-            "I couldn't connect to the LEM backend. Check your Worker URL and API configuration.";
+            "I couldn't access the GitHub knowledge database. Please check your internet connection or try again.";
 
-        connection.textContent = "Offline";
+        connection.textContent = "Database Offline";
 
         console.error(error);
 
@@ -632,10 +773,19 @@ input.addEventListener("input", function() {
 
 });
 
+/* ==================================
+   SUGGESTIONS
+================================== */
+
 function suggest(text) {
+
     input.value = text;
     sendMessage();
 }
+
+/* ==================================
+   NEW CHAT
+================================== */
 
 function newChat() {
 
@@ -643,31 +793,48 @@ function newChat() {
 
     messages.innerHTML = `
         <div class="welcome" id="welcome">
+
             <div class="welcome-logo">LEM.</div>
+
             <h1>What can I help you with?</h1>
-            <p>LEM v 2.5 · Your AI assistant</p>
+
+            <p>
+                LEM v2.5 · GitHub Knowledge Assistant
+            </p>
+
             <div class="suggestions">
+
                 <button class="suggestion"
                 onclick="suggest('Write me some HTML code')">
                     Create HTML
                 </button>
+
                 <button class="suggestion"
                 onclick="suggest('Explain how Python works')">
                     Learn Python
                 </button>
+
                 <button class="suggestion"
                 onclick="suggest('Give me a project idea')">
                     Project ideas
                 </button>
+
             </div>
         </div>
     `;
 
-    connection.textContent = "Ready";
+    connection.textContent = knowledgeDatabase
+        ? "GitHub Connected"
+        : "Database Offline";
 }
+
+/* ==================================
+   STARTUP
+================================== */
+
+loadDatabase();
 
 </script>
 
 </body>
 </html>
-
