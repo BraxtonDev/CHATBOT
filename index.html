@@ -1,20 +1,22 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LEM v2.5</title>
+
+<title>LEM AI</title>
 
 <style>
 :root {
-    --green: #b5ff00;
-    --yellow: #eaff00;
-    --white: #ffffff;
-    --bg: #090d09;
-    --panel: #111811;
-    --border: #293629;
-    --muted: #899489;
+    --background: #07110d;
+    --sidebar: #0b1711;
+    --panel: #102219;
+    --panel-light: #142b1e;
+    --green: #39e58c;
+    --green-dark: #1b7045;
+    --text: #e9fff1;
+    --muted: #8da99a;
+    --border: #1d3a2a;
 }
 
 * {
@@ -23,172 +25,232 @@
 
 body {
     margin: 0;
-    background: var(--bg);
-    color: var(--white);
-    font-family: Arial, sans-serif;
-    height: 100dvh;
-    display: flex;
+    height: 100vh;
     overflow: hidden;
+    background: var(--background);
+    color: var(--text);
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+/* MAIN LAYOUT */
+
+.app {
+    display: flex;
+    height: 100vh;
 }
 
 /* SIDEBAR */
 
 .sidebar {
-    width: 245px;
-    background: #0d130d;
+    width: 255px;
+    min-width: 255px;
+    background: var(--sidebar);
     border-right: 1px solid var(--border);
-    padding: 20px;
     display: flex;
     flex-direction: column;
+    padding: 18px;
 }
 
 .logo {
-    font-size: 26px;
-    font-weight: 900;
-    color: var(--green);
+    font-size: 25px;
+    font-weight: bold;
     letter-spacing: 2px;
-    margin-bottom: 5px;
+    margin-bottom: 25px;
 }
 
-.version {
-    font-size: 11px;
-    color: var(--yellow);
-    letter-spacing: 2px;
-    margin-bottom: 30px;
+.logo span {
+    color: var(--green);
 }
 
 .new-chat {
-    background: var(--green);
-    color: #080d05;
-    border: none;
-    padding: 13px;
+    border: 1px solid var(--green-dark);
+    background: var(--panel);
+    color: var(--text);
+    padding: 12px;
     border-radius: 9px;
-    font-weight: bold;
     cursor: pointer;
+    font-size: 14px;
+    text-align: left;
 }
 
-.sidebar-label {
+.new-chat:hover {
+    background: var(--panel-light);
+}
+
+.sidebar-heading {
     color: var(--muted);
     font-size: 11px;
-    margin-top: 30px;
-    margin-bottom: 12px;
-    letter-spacing: 2px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 28px;
+    margin-bottom: 10px;
 }
 
 .history {
-    color: #b4beb4;
-    font-size: 13px;
-    padding: 12px;
-    border-radius: 8px;
-    cursor: pointer;
+    flex: 1;
+    overflow-y: auto;
 }
 
-.history:hover {
-    background: #1b261b;
+.history-item {
+    padding: 10px;
+    border-radius: 7px;
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.history-item:hover {
+    background: var(--panel);
+    color: var(--text);
 }
 
 .sidebar-bottom {
-    margin-top: auto;
-    color: var(--muted);
-    font-size: 12px;
+    border-top: 1px solid var(--border);
+    padding-top: 15px;
 }
 
-/* MAIN */
+.connection {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 12px;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #d69b35;
+}
+
+.status-dot.online {
+    background: var(--green);
+}
+
+.status-dot.offline {
+    background: #e35d5d;
+}
+
+.settings-button {
+    width: 100%;
+    padding: 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    cursor: pointer;
+}
+
+.settings-button:hover {
+    color: var(--text);
+    background: var(--panel);
+}
+
+/* MAIN CHAT */
 
 .main {
     flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
-    min-width: 0;
 }
 
-.header {
-    height: 70px;
+.topbar {
+    height: 62px;
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 25px;
+    padding: 0 22px;
     flex-shrink: 0;
 }
 
-.header-title {
+.topbar-title {
     font-weight: bold;
-    letter-spacing: 1px;
+    font-size: 14px;
 }
 
-.status {
-    color: var(--green);
+.version {
+    color: var(--muted);
     font-size: 12px;
 }
 
-.status::before {
-    content: "";
-    display: inline-block;
-    width: 7px;
-    height: 7px;
-    background: var(--green);
-    border-radius: 50%;
-    margin-right: 7px;
-    box-shadow: 0 0 8px var(--green);
-}
+/* CHAT AREA */
 
-/* CHAT */
-
-.chat-area {
+.chat {
     flex: 1;
     overflow-y: auto;
-    padding: 30px 20px;
+    padding: 25px 18px;
+    scroll-behavior: smooth;
 }
 
-.messages {
-    max-width: 780px;
+.chat-inner {
+    max-width: 850px;
     margin: auto;
 }
 
+/* WELCOME */
+
 .welcome {
+    min-height: 65%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
     text-align: center;
-    margin: 90px auto 40px;
+    padding: 30px 10px;
 }
 
 .welcome-logo {
-    font-size: 48px;
-    font-weight: 900;
+    font-size: 54px;
+    font-weight: bold;
+    letter-spacing: 5px;
+}
+
+.welcome-logo span {
     color: var(--green);
-    text-shadow: 0 0 25px #b5ff0055;
 }
 
 .welcome h1 {
-    font-size: 28px;
-    margin-bottom: 10px;
+    font-size: 25px;
+    margin: 18px 0 8px;
 }
 
 .welcome p {
     color: var(--muted);
+    max-width: 450px;
+    line-height: 1.6;
     font-size: 14px;
 }
 
 .suggestions {
-    display: flex;
-    justify-content: center;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
-    flex-wrap: wrap;
-    margin-top: 30px;
+    width: 100%;
+    max-width: 550px;
+    margin-top: 25px;
 }
 
 .suggestion {
     background: var(--panel);
-    color: white;
     border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 10px 15px;
+    color: var(--text);
+    padding: 14px;
+    border-radius: 10px;
+    text-align: left;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 13px;
 }
 
 .suggestion:hover {
-    border-color: var(--green);
-    color: var(--green);
+    border-color: var(--green-dark);
+    background: var(--panel-light);
 }
 
 /* MESSAGES */
@@ -196,149 +258,247 @@ body {
 .message {
     display: flex;
     gap: 12px;
-    margin: 25px 0;
+    margin: 22px 0;
     align-items: flex-start;
 }
 
 .avatar {
-    min-width: 34px;
-    height: 34px;
-    background: var(--green);
-    color: #101600;
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
     border-radius: 9px;
-    display: grid;
-    place-items: center;
-    font-weight: 900;
-    font-size: 13px;
+    background: var(--panel-light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--green);
 }
 
-.user .avatar {
-    background: #e8eddf;
+.message.user .avatar {
+    background: #23372b;
+    color: var(--text);
 }
 
 .message-content {
     min-width: 0;
-    flex: 1;
+    max-width: 100%;
+    line-height: 1.65;
+    font-size: 14px;
+    overflow-wrap: anywhere;
 }
 
-.message-name {
+.message-role {
     font-size: 12px;
-    color: var(--green);
+    color: var(--muted);
+    margin-bottom: 5px;
     font-weight: bold;
-    margin-bottom: 8px;
-}
-
-.user .message-name {
-    color: var(--white);
 }
 
 .message-text {
-    color: #e2e8df;
-    font-size: 14px;
-    line-height: 1.7;
-    overflow-wrap: anywhere;
     white-space: pre-wrap;
 }
 
-/* INPUT */
+.message-text pre {
+    background: #030906;
+    border: 1px solid var(--border);
+    padding: 13px;
+    border-radius: 8px;
+    overflow-x: auto;
+    white-space: pre;
+}
 
-.input-section {
-    padding: 15px 20px 22px;
-    background: linear-gradient(transparent, #090d09 20%);
+.message-text code {
+    font-family: Consolas, monospace;
+}
+
+.typing {
+    color: var(--muted);
+    font-size: 13px;
+    animation: pulse 1s infinite alternate;
+}
+
+@keyframes pulse {
+    from { opacity: 0.45; }
+    to { opacity: 1; }
+}
+
+/* INPUT AREA */
+
+.input-area {
+    border-top: 1px solid var(--border);
+    padding: 17px;
     flex-shrink: 0;
 }
 
-.input-container {
-    max-width: 780px;
+.input-inner {
+    max-width: 850px;
     margin: auto;
-    border: 1px solid #45553c;
-    background: #141c13;
-    border-radius: 15px;
-    padding: 10px;
+}
+
+.input-box {
     display: flex;
     align-items: flex-end;
     gap: 10px;
-    transition: 0.2s;
-}
-
-.input-container:focus-within {
-    border-color: var(--green);
-    box-shadow: 0 0 15px #b5ff0015;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    padding: 10px;
 }
 
 textarea {
     flex: 1;
-    background: transparent;
-    color: white;
+    min-width: 0;
+    resize: none;
     border: none;
     outline: none;
-    resize: none;
-    padding: 10px;
+    background: transparent;
+    color: var(--text);
     font-family: inherit;
     font-size: 14px;
-    min-height: 40px;
-    max-height: 130px;
+    line-height: 1.5;
+    padding: 8px;
+    max-height: 150px;
 }
 
 textarea::placeholder {
-    color: #788276;
+    color: var(--muted);
 }
 
-.send {
-    background: var(--green);
-    color: #101600;
+.send-button {
+    width: 40px;
+    height: 40px;
     border: none;
-    width: 43px;
-    height: 43px;
-    border-radius: 10px;
+    border-radius: 9px;
+    background: var(--green);
+    color: #062012;
     font-size: 19px;
     font-weight: bold;
     cursor: pointer;
+    flex-shrink: 0;
 }
 
-.send:hover {
-    background: var(--yellow);
-    box-shadow: 0 0 15px #b5ff0066;
+.send-button:hover {
+    background: #6af0a8;
 }
 
-.send:disabled {
+.send-button:disabled {
     opacity: 0.4;
     cursor: not-allowed;
 }
 
-.footer-note {
-    color: #647064;
-    font-size: 10px;
+.disclaimer {
     text-align: center;
-    margin-top: 12px;
+    color: var(--muted);
+    font-size: 11px;
+    margin-top: 10px;
+}
+
+/* SETTINGS */
+
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    align-items: center;
+    justify-content: center;
+    padding: 15px;
+    z-index: 10;
+}
+
+.modal-overlay.open {
+    display: flex;
+}
+
+.modal {
+    width: 100%;
+    max-width: 430px;
+    background: var(--sidebar);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px;
+}
+
+.modal h2 {
+    margin-top: 0;
+    font-size: 19px;
+}
+
+.modal label {
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+    margin: 17px 0 7px;
+}
+
+.modal input {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    outline: none;
+    background: var(--panel);
+    color: var(--text);
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 9px;
+    margin-top: 20px;
+}
+
+.modal-actions button {
+    padding: 10px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.cancel-button {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+}
+
+.save-button {
+    background: var(--green);
+    border: none;
+    color: #062012;
+    font-weight: bold;
 }
 
 /* MOBILE */
 
-@media(max-width: 650px) {
+@media(max-width:650px) {
+
     .sidebar {
         display: none;
     }
 
-    .header {
-        height: 60px;
+    .topbar {
         padding: 0 15px;
     }
 
-    .chat-area {
-        padding: 15px;
-    }
-
-    .welcome {
-        margin-top: 65px;
+    .chat {
+        padding: 15px 12px;
     }
 
     .welcome-logo {
-        font-size: 40px;
+        font-size: 44px;
     }
 
-    .input-section {
-        padding: 10px 12px 18px;
+    .welcome h1 {
+        font-size: 21px;
+    }
+
+    .suggestions {
+        grid-template-columns: 1fr;
+    }
+
+    .input-area {
+        padding: 10px;
     }
 }
 </style>
@@ -346,493 +506,794 @@ textarea::placeholder {
 
 <body>
 
-<!-- SIDEBAR -->
+<div class="app">
 
-<aside class="sidebar">
-    <div class="logo">LEM.</div>
-    <div class="version">VERSION 2.5</div>
+    <!-- SIDEBAR -->
 
-    <button class="new-chat" onclick="newChat()">
-        + New Chat
-    </button>
+    <aside class="sidebar">
 
-    <div class="sidebar-label">WORKSPACE</div>
-
-    <div class="history">◈ Current conversation</div>
-    <div class="history">⌕ GitHub Knowledge</div>
-
-    <div class="sidebar-bottom">
-        LEM v2.5<br>
-        <span style="color:var(--green)">●</span>
-        <span id="sidebarStatus">Loading database...</span>
-    </div>
-</aside>
-
-<!-- MAIN -->
-
-<main class="main">
-
-    <header class="header">
-        <div class="header-title">
-            LEM <span style="color:var(--green)">v2.5</span>
+        <div class="logo">
+            <span>LEM</span>
         </div>
 
-        <div class="status" id="connection">
-            Loading
+        <button class="new-chat" id="newChatButton">
+            + New chat
+        </button>
+
+        <div class="sidebar-heading">
+            Recent chats
         </div>
-    </header>
 
-    <!-- CHAT -->
+        <div class="history" id="history"></div>
 
-    <section class="chat-area" id="chatArea">
-        <div class="messages" id="messages">
+        <div class="sidebar-bottom">
 
-            <div class="welcome" id="welcome">
-                <div class="welcome-logo">LEM.</div>
-
-                <h1>What can I help you with?</h1>
-
-                <p>
-                    LEM v2.5 · GitHub Knowledge Assistant
-                </p>
-
-                <div class="suggestions">
-
-                    <button class="suggestion"
-                    onclick="suggest('Write me some HTML code')">
-                        Create HTML
-                    </button>
-
-                    <button class="suggestion"
-                    onclick="suggest('Explain how Python works')">
-                        Learn Python
-                    </button>
-
-                    <button class="suggestion"
-                    onclick="suggest('Give me a project idea')">
-                        Project ideas
-                    </button>
-
-                </div>
+            <div class="connection">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="connectionText">Checking connection...</span>
             </div>
 
-        </div>
-    </section>
-
-    <!-- INPUT -->
-
-    <section class="input-section">
-
-        <div class="input-container">
-
-            <textarea
-                id="userInput"
-                placeholder="Message LEM..."
-                rows="1"
-            ></textarea>
-
-            <button class="send"
-                id="sendButton"
-                onclick="sendMessage()">
-                ↑
+            <button class="settings-button" id="settingsButton">
+                Settings
             </button>
 
         </div>
 
-        <div class="footer-note">
-            LEM v2.5 · Powered by GitHub Knowledge
+    </aside>
+
+
+    <!-- MAIN CONTENT -->
+
+    <main class="main">
+
+        <header class="topbar">
+
+            <div class="topbar-title">
+                LEM AI
+            </div>
+
+            <div class="version">
+                LEM · Local model interface
+            </div>
+
+        </header>
+
+
+        <!-- CHAT -->
+
+        <section class="chat" id="chat">
+
+            <div class="chat-inner" id="chatInner">
+
+                <div class="welcome" id="welcome">
+
+                    <div class="welcome-logo">
+                        <span>LEM</span>
+                    </div>
+
+                    <h1>How can I help?</h1>
+
+                    <p>
+                        Start a conversation with LEM.
+                        Connect your locally trained model
+                        through the Python server.
+                    </p>
+
+                    <div class="suggestions">
+
+                        <button class="suggestion" data-prompt="Explain how HTML works.">
+                            Explain HTML
+                        </button>
+
+                        <button class="suggestion" data-prompt="Write a simple Python program.">
+                            Write Python code
+                        </button>
+
+                        <button class="suggestion" data-prompt="What is a neural network?">
+                            Explain neural networks
+                        </button>
+
+                        <button class="suggestion" data-prompt="How does a Transformer language model work?">
+                            Explain Transformers
+                        </button>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- INPUT -->
+
+        <footer class="input-area">
+
+            <div class="input-inner">
+
+                <div class="input-box">
+
+                    <textarea
+                        id="promptInput"
+                        rows="1"
+                        placeholder="Message LEM..."
+                    ></textarea>
+
+                    <button
+                        class="send-button"
+                        id="sendButton"
+                        title="Send message"
+                    >
+                        ↑
+                    </button>
+
+                </div>
+
+                <div class="disclaimer">
+                    LEM is an experimental model. Its responses may be inaccurate.
+                </div>
+
+            </div>
+
+        </footer>
+
+    </main>
+
+</div>
+
+
+<!-- SETTINGS MODAL -->
+
+<div class="modal-overlay" id="settingsModal">
+
+    <div class="modal">
+
+        <h2>LEM settings</h2>
+
+        <label for="endpointInput">
+            Python server endpoint
+        </label>
+
+        <input
+            id="endpointInput"
+            type="url"
+            value="http://127.0.0.1:8000/generate"
+            placeholder="http://127.0.0.1:8000/generate"
+        >
+
+        <label for="tokenInput">
+            Maximum new tokens
+        </label>
+
+        <input
+            id="tokenInput"
+            type="number"
+            min="1"
+            max="1000"
+            value="200"
+        >
+
+        <div class="modal-actions">
+
+            <button class="cancel-button" id="cancelSettings">
+                Cancel
+            </button>
+
+            <button class="save-button" id="saveSettings">
+                Save settings
+            </button>
+
         </div>
 
-    </section>
+    </div>
 
-</main>
+</div>
+
 
 <script>
 
-/* ==================================
-   CONFIGURATION
-================================== */
+/* --------------------------------------------------
+   SETTINGS
+-------------------------------------------------- */
 
-const CONFIG = {
-    GITHUB_DATA:
-    "https://raw.githubusercontent.com/BraxtonDev/CHATBOT/main/data/data.json",
+const DEFAULT_ENDPOINT = "http://127.0.0.1:8000/generate";
 
-    MAX_RESULTS: 3,
-    MAX_MESSAGE_LENGTH: 2000
-};
+let endpoint = DEFAULT_ENDPOINT;
+let maxNewTokens = 200;
 
-/* ==================================
-   CHAT VARIABLES
-================================== */
+let messages = [];
+let chatHistory = [];
 
-const input = document.getElementById("userInput");
-const messages = document.getElementById("messages");
-const chatArea = document.getElementById("chatArea");
+let isGenerating = false;
+
+
+/* --------------------------------------------------
+   ELEMENTS
+-------------------------------------------------- */
+
+const chat = document.getElementById("chat");
+const chatInner = document.getElementById("chatInner");
+
+const welcome = document.getElementById("welcome");
+
+const promptInput = document.getElementById("promptInput");
 const sendButton = document.getElementById("sendButton");
-const connection = document.getElementById("connection");
-const sidebarStatus = document.getElementById("sidebarStatus");
 
-let conversation = [];
-let busy = false;
-let knowledgeDatabase = null;
+const statusDot = document.getElementById("statusDot");
+const connectionText = document.getElementById("connectionText");
 
-/* ==================================
-   DATABASE LOADER
-================================== */
+const historyElement = document.getElementById("history");
 
-async function loadDatabase() {
+const settingsModal = document.getElementById("settingsModal");
+const endpointInput = document.getElementById("endpointInput");
+const tokenInput = document.getElementById("tokenInput");
 
-    connection.textContent = "Loading";
-    sidebarStatus.textContent = "Loading database...";
 
-    try {
+/* --------------------------------------------------
+   CONNECTION STATUS
+-------------------------------------------------- */
 
-        const response = await fetch(CONFIG.GITHUB_DATA, {
-            cache: "no-cache"
-        });
+function setConnectionStatus(status, text) {
 
-        if (!response.ok) {
-            throw new Error("GitHub returned " + response.status);
-        }
+    statusDot.className = "status-dot";
 
-        const data = await response.json();
-
-        if (!data || !Array.isArray(data.content)) {
-            throw new Error("Invalid database format");
-        }
-
-        knowledgeDatabase = data.content.filter(
-            item => typeof item === "string"
-        );
-
-        connection.textContent = "GitHub Connected";
-        sidebarStatus.textContent =
-            knowledgeDatabase.length + " passages loaded";
-
-        console.log(
-            "LEM database loaded:",
-            knowledgeDatabase.length,
-            "passages"
-        );
-
-        return true;
-
-    } catch (error) {
-
-        knowledgeDatabase = null;
-
-        connection.textContent = "Database Offline";
-        sidebarStatus.textContent = "Database unavailable";
-
-        console.error("Database error:", error);
-
-        return false;
-    }
-}
-
-/* ==================================
-   MESSAGE DISPLAY
-================================== */
-
-function addMessage(role, text) {
-
-    document.getElementById("welcome")?.remove();
-
-    const message = document.createElement("div");
-    message.className = "message " + role;
-
-    const avatar = document.createElement("div");
-    avatar.className = "avatar";
-    avatar.textContent = role === "user" ? "U" : "L";
-
-    const content = document.createElement("div");
-    content.className = "message-content";
-
-    const name = document.createElement("div");
-    name.className = "message-name";
-    name.textContent = role === "user" ? "YOU" : "LEM";
-
-    const body = document.createElement("div");
-    body.className = "message-text";
-    body.textContent = text;
-
-    content.appendChild(name);
-    content.appendChild(body);
-
-    message.appendChild(avatar);
-    message.appendChild(content);
-
-    messages.appendChild(message);
-
-    chatArea.scrollTop = chatArea.scrollHeight;
-
-    return message;
-}
-
-/* ==================================
-   TEXT PROCESSING
-================================== */
-
-function tokenize(text) {
-
-    const ignored = new Set([
-        "the", "and", "for", "that", "this",
-        "what", "how", "can", "you", "are",
-        "does", "with", "from", "tell", "about",
-        "have", "has", "was", "were", "will",
-        "would", "could", "should", "into",
-        "your", "their", "there", "then",
-        "please", "explain", "make", "some"
-    ]);
-
-    return (text.toLowerCase().match(/[a-z0-9]+/g) || [])
-        .filter(word => word.length > 2 && !ignored.has(word));
-}
-
-/* ==================================
-   SEARCH ENGINE
-================================== */
-
-function searchDatabase(query) {
-
-    if (!knowledgeDatabase) {
-        return [];
+    if (status === "online") {
+        statusDot.classList.add("online");
     }
 
-    const keywords = tokenize(query);
-
-    if (keywords.length === 0) {
-        return [];
+    if (status === "offline") {
+        statusDot.classList.add("offline");
     }
 
-    const queryLower = query.toLowerCase();
-
-    const results = knowledgeDatabase.map(passage => {
-
-        const content = passage.toLowerCase();
-        let score = 0;
-
-        for (const word of keywords) {
-
-            const matches = content.split(word).length - 1;
-
-            if (matches > 0) {
-                score += Math.min(matches, 5);
-            }
-        }
-
-        // Give a small bonus to passages matching the whole query.
-        if (content.includes(queryLower)) {
-            score += 5;
-        }
-
-        // Prefer passages that contain more of the query keywords.
-        const matchedWords = keywords.filter(
-            word => content.includes(word)
-        ).length;
-
-        score += matchedWords * 0.5;
-
-        return {
-            passage,
-            score,
-            matchedWords
-        };
-
-    });
-
-    return results
-        .filter(item => item.score > 0)
-        .sort((a, b) => {
-            if (b.score !== a.score) {
-                return b.score - a.score;
-            }
-
-            return b.matchedWords - a.matchedWords;
-        })
-        .slice(0, CONFIG.MAX_RESULTS);
+    connectionText.textContent = text;
 }
 
-/* ==================================
-   RESPONSE GENERATOR
-================================== */
 
-function generateReply(query) {
+async function checkConnection() {
 
-    const results = searchDatabase(query);
-
-    if (!results.length) {
-
-        return "I couldn't find a matching passage in my GitHub knowledge database.\n\nTry using different keywords or asking about a topic in my database.";
-    }
-
-    return results
-        .map(item => item.passage)
-        .join("\n\n");
-}
-
-/* ==================================
-   SEND MESSAGE
-================================== */
-
-async function sendMessage() {
-
-    const text = input.value.trim();
-
-    if (!text || busy) return;
-
-    if (text.length > CONFIG.MAX_MESSAGE_LENGTH) {
-        addMessage(
-            "assistant",
-            "Please keep your message under " +
-            CONFIG.MAX_MESSAGE_LENGTH +
-            " characters."
-        );
-        return;
-    }
-
-    addMessage("user", text);
-
-    conversation.push({
-        role: "user",
-        content: text
-    });
-
-    input.value = "";
-    input.style.height = "40px";
-
-    busy = true;
-    sendButton.disabled = true;
-
-    connection.textContent = "Searching";
-
-    const loading = addMessage(
-        "assistant",
-        "LEM is searching its knowledge..."
+    setConnectionStatus(
+        "checking",
+        "Checking model connection..."
     );
 
     try {
 
-        if (!knowledgeDatabase) {
-            await loadDatabase();
+        /*
+           This checks the expected server's /health route.
+           If your server does not provide /health, the
+           interface will still attempt generation when
+           the user sends a message.
+        */
+
+        const healthURL = endpoint.replace(
+            /\/generate\/?$/,
+            "/health"
+        );
+
+        const response = await fetch(
+            healthURL,
+            {
+                method: "GET"
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error("Health check failed");
         }
 
-        if (!knowledgeDatabase) {
-            throw new Error("Knowledge database unavailable");
-        }
-
-        const reply = generateReply(text);
-
-        loading.querySelector(".message-text").textContent = reply;
-
-        conversation.push({
-            role: "assistant",
-            content: reply
-        });
-
-        connection.textContent = "GitHub Connected";
+        setConnectionStatus(
+            "online",
+            "Model server connected"
+        );
 
     } catch (error) {
 
-        loading.querySelector(".message-text").textContent =
-            "I couldn't access the GitHub knowledge database. Please check your internet connection or try again.";
+        setConnectionStatus(
+            "offline",
+            "Model server not detected"
+        );
 
-        connection.textContent = "Database Offline";
-
-        console.error(error);
-
-    } finally {
-
-        busy = false;
-        sendButton.disabled = false;
-        input.focus();
-
-        chatArea.scrollTop = chatArea.scrollHeight;
-    }
-}
-
-/* ==================================
-   INPUT CONTROLS
-================================== */
-
-input.addEventListener("keydown", function(e) {
-
-    if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        sendMessage();
     }
 
-});
-
-input.addEventListener("input", function() {
-
-    this.style.height = "40px";
-
-    this.style.height =
-        Math.min(this.scrollHeight, 130) + "px";
-
-});
-
-/* ==================================
-   SUGGESTIONS
-================================== */
-
-function suggest(text) {
-
-    input.value = text;
-    sendMessage();
 }
 
-/* ==================================
-   NEW CHAT
-================================== */
+
+/* --------------------------------------------------
+   MESSAGE DISPLAY
+-------------------------------------------------- */
+
+function addMessage(role, text) {
+
+    if (welcome) {
+        welcome.style.display = "none";
+    }
+
+    const message = document.createElement("div");
+
+    message.className = "message " + role;
+
+    const avatar = document.createElement("div");
+    avatar.className = "avatar";
+
+    avatar.textContent = role === "user" ? "YOU" : "LM";
+
+    const content = document.createElement("div");
+    content.className = "message-content";
+
+    const roleLabel = document.createElement("div");
+    roleLabel.className = "message-role";
+
+    roleLabel.textContent = role === "user" ? "You" : "LEM";
+
+    const messageText = document.createElement("div");
+    messageText.className = "message-text";
+
+    // Use textContent so generated text is displayed safely.
+    messageText.textContent = text;
+
+    content.appendChild(roleLabel);
+    content.appendChild(messageText);
+
+    message.appendChild(avatar);
+    message.appendChild(content);
+
+    chatInner.appendChild(message);
+
+    chat.scrollTop = chat.scrollHeight;
+
+    return message;
+}
+
+
+/* --------------------------------------------------
+   TYPING INDICATOR
+-------------------------------------------------- */
+
+function addTypingIndicator() {
+
+    const message = document.createElement("div");
+
+    message.className = "message assistant";
+    message.id = "typingIndicator";
+
+    message.innerHTML = `
+        <div class="avatar">LM</div>
+        <div class="message-content">
+            <div class="message-role">LEM</div>
+            <div class="typing">Generating response...</div>
+        </div>
+    `;
+
+    chatInner.appendChild(message);
+
+    chat.scrollTop = chat.scrollHeight;
+
+    return message;
+}
+
+
+/* --------------------------------------------------
+   CHAT HISTORY
+-------------------------------------------------- */
+
+function updateHistory() {
+
+    historyElement.innerHTML = "";
+
+    chatHistory.forEach((item, index) => {
+
+        const element = document.createElement("div");
+
+        element.className = "history-item";
+
+        element.textContent = item.title;
+
+        element.addEventListener("click", () => {
+            loadChat(index);
+        });
+
+        historyElement.appendChild(element);
+
+    });
+
+}
+
+
+function saveCurrentChat() {
+
+    if (messages.length === 0) {
+        return;
+    }
+
+    const firstUserMessage = messages.find(
+        message => message.role === "user"
+    );
+
+    const title = firstUserMessage
+        ? firstUserMessage.content.slice(0, 35)
+        : "New chat";
+
+    chatHistory.unshift({
+        title: title,
+        messages: [...messages]
+    });
+
+    if (chatHistory.length > 20) {
+        chatHistory.pop();
+    }
+
+    updateHistory();
+
+}
+
+
+function loadChat(index) {
+
+    const selected = chatHistory[index];
+
+    if (!selected) {
+        return;
+    }
+
+    messages = [...selected.messages];
+
+    chatInner.innerHTML = "";
+
+    messages.forEach(message => {
+
+        addMessage(
+            message.role,
+            message.content
+        );
+
+    });
+
+}
+
 
 function newChat() {
 
-    conversation = [];
+    saveCurrentChat();
 
-    messages.innerHTML = `
+    messages = [];
+
+    chatInner.innerHTML = `
         <div class="welcome" id="welcome">
 
-            <div class="welcome-logo">LEM.</div>
+            <div class="welcome-logo">
+                <span>LEM</span>
+            </div>
 
-            <h1>What can I help you with?</h1>
+            <h1>How can I help?</h1>
 
             <p>
-                LEM v2.5 · GitHub Knowledge Assistant
+                Start a conversation with LEM.
+                Connect your locally trained model
+                through the Python server.
             </p>
 
             <div class="suggestions">
 
-                <button class="suggestion"
-                onclick="suggest('Write me some HTML code')">
-                    Create HTML
+                <button class="suggestion" data-prompt="Explain how HTML works.">
+                    Explain HTML
                 </button>
 
-                <button class="suggestion"
-                onclick="suggest('Explain how Python works')">
-                    Learn Python
+                <button class="suggestion" data-prompt="Write a simple Python program.">
+                    Write Python code
                 </button>
 
-                <button class="suggestion"
-                onclick="suggest('Give me a project idea')">
-                    Project ideas
+                <button class="suggestion" data-prompt="What is a neural network?">
+                    Explain neural networks
+                </button>
+
+                <button class="suggestion" data-prompt="How does a Transformer language model work?">
+                    Explain Transformers
                 </button>
 
             </div>
+
         </div>
     `;
 
-    connection.textContent = knowledgeDatabase
-        ? "GitHub Connected"
-        : "Database Offline";
+    attachSuggestionEvents();
+
 }
 
-/* ==================================
-   STARTUP
-================================== */
 
-loadDatabase();
+/* --------------------------------------------------
+   SEND MESSAGE TO MODEL
+-------------------------------------------------- */
+
+async function sendMessage(text) {
+
+    text = text.trim();
+
+    if (!text || isGenerating) {
+        return;
+    }
+
+    isGenerating = true;
+
+    sendButton.disabled = true;
+
+    // Display user message.
+
+    addMessage(
+        "user",
+        text
+    );
+
+    messages.push({
+        role: "user",
+        content: text
+    });
+
+    promptInput.value = "";
+    promptInput.style.height = "auto";
+
+    const typingIndicator = addTypingIndicator();
+
+    try {
+
+        /*
+           Expected Python server request:
+
+           POST /generate
+
+           {
+               "prompt": "Hello",
+               "max_new_tokens": 200
+           }
+
+           Expected response:
+
+           {
+               "response": "Hello!..."
+           }
+        */
+
+        const response = await fetch(
+            endpoint,
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json"
+                },
+
+                body: JSON.stringify({
+                    prompt: text,
+                    max_new_tokens: maxNewTokens
+                })
+            }
+        );
+
+        if (!response.ok) {
+
+            throw new Error(
+                "Server returned HTTP " + response.status
+            );
+
+        }
+
+        const data = await response.json();
+
+        const answer =
+            data.response ??
+            data.text ??
+            data.generated_text;
+
+        if (typeof answer !== "string") {
+
+            throw new Error(
+                "The server response did not contain a response, text, or generated_text string."
+            );
+
+        }
+
+        typingIndicator.remove();
+
+        addMessage(
+            "assistant",
+            answer
+        );
+
+        messages.push({
+            role: "assistant",
+            content: answer
+        });
+
+        setConnectionStatus(
+            "online",
+            "Model server connected"
+        );
+
+    } catch (error) {
+
+        typingIndicator.remove();
+
+        addMessage(
+            "assistant",
+            "I could not reach the LEM model server.\n\n" +
+            "Error: " + error.message +
+            "\n\nCheck that your Python server is running, " +
+            "that the endpoint is correct, and that it allows requests from this page."
+        );
+
+        setConnectionStatus(
+            "offline",
+            "Model server unavailable"
+        );
+
+    }
+
+    isGenerating = false;
+
+    sendButton.disabled = false;
+
+    promptInput.focus();
+
+}
+
+
+/* --------------------------------------------------
+   INPUT EVENTS
+-------------------------------------------------- */
+
+sendButton.addEventListener("click", () => {
+
+    sendMessage(
+        promptInput.value
+    );
+
+});
+
+
+promptInput.addEventListener("keydown", event => {
+
+    if (
+        event.key === "Enter" &&
+        !event.shiftKey
+    ) {
+
+        event.preventDefault();
+
+        sendMessage(
+            promptInput.value
+        );
+
+    }
+
+});
+
+
+promptInput.addEventListener("input", () => {
+
+    promptInput.style.height = "auto";
+
+    promptInput.style.height =
+        Math.min(promptInput.scrollHeight, 150) + "px";
+
+});
+
+
+/* --------------------------------------------------
+   SUGGESTION BUTTONS
+-------------------------------------------------- */
+
+function attachSuggestionEvents() {
+
+    document.querySelectorAll(".suggestion").forEach(button => {
+
+        button.addEventListener("click", () => {
+
+            sendMessage(
+                button.dataset.prompt
+            );
+
+        });
+
+    });
+
+}
+
+attachSuggestionEvents();
+
+
+/* --------------------------------------------------
+   NEW CHAT
+-------------------------------------------------- */
+
+document.getElementById("newChatButton").addEventListener(
+    "click",
+    newChat
+);
+
+
+/* --------------------------------------------------
+   SETTINGS
+-------------------------------------------------- */
+
+document.getElementById("settingsButton").addEventListener(
+    "click",
+    () => {
+
+        endpointInput.value = endpoint;
+        tokenInput.value = maxNewTokens;
+
+        settingsModal.classList.add("open");
+
+    }
+);
+
+
+document.getElementById("cancelSettings").addEventListener(
+    "click",
+    () => {
+
+        settingsModal.classList.remove("open");
+
+    }
+);
+
+
+document.getElementById("saveSettings").addEventListener(
+    "click",
+    () => {
+
+        const newEndpoint = endpointInput.value.trim();
+
+        const newTokenCount = Number(tokenInput.value);
+
+        try {
+
+            const parsedURL = new URL(newEndpoint);
+
+            if (
+                parsedURL.protocol !== "http:" &&
+                parsedURL.protocol !== "https:"
+            ) {
+                throw new Error("Use an HTTP or HTTPS endpoint.");
+            }
+
+        } catch (error) {
+
+            alert("Enter a valid server URL.");
+
+            return;
+
+        }
+
+        if (
+            !Number.isInteger(newTokenCount) ||
+            newTokenCount < 1 ||
+            newTokenCount > 1000
+        ) {
+
+            alert("Maximum new tokens must be between 1 and 1000.");
+
+            return;
+
+        }
+
+        endpoint = newEndpoint;
+
+        maxNewTokens = newTokenCount;
+
+        settingsModal.classList.remove("open");
+
+        checkConnection();
+
+    }
+);
+
+
+/* --------------------------------------------------
+   STARTUP
+-------------------------------------------------- */
+
+checkConnection();
 
 </script>
 
